@@ -7,4 +7,7 @@
    ```bash
    pip install streamlit
    ```
-3. Запуск приложения из main.py в корневой папке
+3. Запуск приложения из main.py через терминал
+    ```bash
+   streamlit run main.py
+   ```

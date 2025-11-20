@@ -5,7 +5,7 @@
 2. Установить зависимости
    
    ```bash
-   pip install streamlit
+   pip install -r requirements.txt
    ```
 3. Запуск приложения из main.py через терминал
     ```bash

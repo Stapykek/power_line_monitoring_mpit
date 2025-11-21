@@ -3,6 +3,31 @@
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$">
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/ai_model/ai_env/Include" />
+      <excludeFolder url="file://$MODULE_DIR$/ai_model/ai_env/Lib" />
+      <excludeFolder url="file://$MODULE_DIR$/ai_model/ai_env/Scripts" />
+      <excludeFolder url="file://$MODULE_DIR$/ai_model/ai_env/share" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/0" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/1" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/10" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/11" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/12" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/13" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/14" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/15" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/16" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/17" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/18" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/19" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/2" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/3" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/4" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/5" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/6" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/7" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/8" />
+      <excludeFolder url="file://$MODULE_DIR$/server/sessions/9" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

@@ -12,19 +12,37 @@ export default function Instructions() {
             </Typography>
             <List>
                 <ListItem>
-                    <ListItemText primary="1. Перетащите файлы в зону загрузки или нажмите 'Выбрать файл'" />
+                     <ListItemText primary="1. Перетащите ZIP-архив или изображения (JPG/PNG/TIFF) в зону загрузки." />
+                </ListItem>
+                <ListItem sx={{ pl: 4 }}>
+                    <ListItemText primary="— Поддерживаются папки до 10 ГБ." />
+                </ListItem>
+                <ListItem sx={{ pl: 4 }}>
+                    <ListItemText primary="— Рекомендуется загружать снимки с дрона в исходном разрешении." />
                 </ListItem>
                 <ListItem>
-                    <ListItemText primary="2. Подождите, пока система обработает изображения" />
+                    <ListItemText primary="2. Нажмите «Начать анализ»." />
+                </ListItem>
+                <ListItem sx={{ pl: 4 }}>
+                    <ListItemText primary="— Система автоматически обработает все изображения." />
                 </ListItem>
                 <ListItem>
-                    <ListItemText primary="3. После анализа вы увидите результаты в виде галереи с детализированными метками" />
+                    <ListItemText primary="3. Просмотрите результаты:" />
+                </ListItem>
+                <ListItem sx={{ pl: 4 }}>
+                    <ListItemText primary="— Галерея: сверху вы можете выбрать фильтры. Кликните на изображение, чтобы увидеть детали." />
+                </ListItem>
+                <ListItem sx={{ pl: 4 }}>
+                    <ListItemText primary="— Справа: топ-3 класса с уверенностью и признаки дефектов (трещина, перекос и т.д.), режим сегментации и выбор уровня критичности" />
+                </ListItem>
+                <ListItem sx={{ pl: 4 }}>
+                    <ListItemText primary="— Также вы можете посмотреть статистику по всему пакету." />
                 </ListItem>
                 <ListItem>
-                    <ListItemText primary="4. Для просмотра деталей нажмите на любую картинку" />
+                    <ListItemText primary="4. Сохраните сессию:" />
                 </ListItem>
-                <ListItem>
-                    <ListItemText primary="5. В правой панели отобразится статистика по всем обнаруженным дефектам" />
+                <ListItem sx={{ pl: 4 }}>
+                    <ListItemText primary="— Нажмите «Сохранить сессию», чтобы экспортировать отчёт и вернуться к результатам позже." />
                 </ListItem>
             </List>
         </Container>

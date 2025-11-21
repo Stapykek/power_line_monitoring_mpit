@@ -2,8 +2,9 @@ const express = require('express');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
-const { unzip } = require('unzipper');
+const unzipper = require('unzipper');
 const cors = require('cors');
+const fetch = require('node-fetch');
 
 const app = express();
 const port = 5000;
@@ -18,13 +19,17 @@ app.use(cors({
 // Настройка Multer для загрузки файлов
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, 'uploads/'),
-    filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        const safeName = Date.now() + '-' + Math.random().toString(36).substr(2, 9) + ext;
+        cb(null, safeName);
+    }
 });
 const upload = multer({ storage });
 
 // Создаем директории при запуске
-const sessionsDir = path.join(__dirname, 'sessions');
-const uploadsDir = path.join(__dirname, 'uploads');
+const sessionsDir = process.env.NODE_ENV === 'production' ? '/app/sessions' : path.join(__dirname, 'sessions');
+const uploadsDir = process.env.NODE_ENV === 'production' ? '/app/uploads' : path.join(__dirname, 'uploads');
 if (!fs.existsSync(sessionsDir)) fs.mkdirSync(sessionsDir);
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 
@@ -36,10 +41,14 @@ const getFreeSessionId = () => {
 };
 
 // Обработка загрузки файлов
-app.post('/upload', upload.array('files'), (req, res) => {
+app.post('/upload', upload.array('files'), async (req, res) => {
     const sessionId = getFreeSessionId();
     const sessionDir = path.join(sessionsDir, String(sessionId));
     fs.mkdirSync(sessionDir);
+
+    // Create mapping for original to server filenames
+    const filenameMapping = {};
+    const originalToServerNames = new Map(); // Map to track original to server name mapping
 
     // Проверка общего размера
     const totalSize = req.files.reduce((sum, file) => sum + file.size, 0);
@@ -52,42 +61,107 @@ app.post('/upload', upload.array('files'), (req, res) => {
     }
 
     // Обработка каждого файла
-    req.files.forEach(file => {
+    const promises = req.files.map(async (file) => {
         const ext = path.extname(file.originalname).toLowerCase();
         const validExtensions = ['.jpg', '.jpeg', '.png', '.tiff', '.raw', '.zip'];
 
-        if (validExtensions.includes(ext)) {
-            if (ext === '.zip') {
-                // Распаковка архива
-                try {
-                    fs.createReadStream(file.path)
-                        .pipe(unzip.Extract({ path: sessionDir }))
-                        .on('finish', () => fs.unlinkSync(file.path));
-                } catch (e) {
-                    console.error('Ошибка распаковки:', e);
-                    fs.unlinkSync(file.path);
+        if (!validExtensions.includes(ext)) {
+            fs.unlinkSync(file.path);
+            return;
+        }
+
+        if (ext === '.zip') {
+            try {
+                // Проверяем существование файла перед распаковкой
+                if (!fs.existsSync(file.path)) {
+                    throw new Error(`Файл не найден: ${file.path}`);
                 }
-            } else {
-                // Просто копируем файл
-                fs.copyFileSync(file.path, path.join(sessionDir, file.originalname));
+
+                const unzipStream = fs.createReadStream(file.path).pipe(unzipper.Extract({ path: sessionDir }));
+                await new Promise((resolve, reject) => {
+                    unzipStream.on('finish', resolve);
+                    unzipStream.on('error', reject);
+                });
                 fs.unlinkSync(file.path);
+            } catch (e) {
+                console.error('Ошибка распаковки ZIP:', e);
+                fs.unlinkSync(file.path);
+                throw new Error('Невозможно распаковать архив');
             }
         } else {
-            // Удаляем невалидный файл
+            // Copy file with a temporary name that preserves original name info
+            const tempName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${file.originalname}`;
+            const tempPath = path.join(sessionDir, tempName);
+            fs.copyFileSync(file.path, tempPath);
             fs.unlinkSync(file.path);
+            
+            // Store the mapping for later when we rename to sequential numbers
+            originalToServerNames.set(tempName, file.originalname);
         }
     });
 
-    // Сканируем сессию и оставляем только валидные изображения
-    const validFiles = [];
-    fs.readdirSync(sessionDir).forEach(file => {
+    await Promise.all(promises);
+
+    // Переименовываем все файлы в последовательные числа и сохраняем mapping
+    const files = fs.readdirSync(sessionDir);
+    let serverFileIndex = 0;
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
         const ext = path.extname(file).toLowerCase();
         if (['.jpg', '.jpeg', '.png', '.tiff', '.raw'].includes(ext)) {
-            validFiles.push(file);
+            // Create server filename (sequential number)
+            const newFileName = `${serverFileIndex}${ext}`;
+            const oldPath = path.join(sessionDir, file);
+            const newPath = path.join(sessionDir, newFileName);
+            
+            fs.renameSync(oldPath, newPath);
+            
+            // Find the original name using our mapping
+            const originalName = originalToServerNames.get(file) || newFileName;
+            filenameMapping[originalName] = newFileName;
+            
+            serverFileIndex++;
         } else {
             fs.unlinkSync(path.join(sessionDir, file));
         }
-    });
+    }
+
+    // Save the filename mapping to metadata.json
+    const metadataPath = path.join(sessionDir, 'metadata.json');
+    const metadata = {
+        filename_mapping: filenameMapping,
+        upload_time: new Date().toISOString()
+    };
+    fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+
+    // Получаем список валидных файлов для ответа
+    const validFiles = fs.readdirSync(sessionDir)
+        .filter(file => {
+            const ext = path.extname(file).toLowerCase();
+            return ['.jpg', '.jpeg', '.png', '.tiff', '.raw'].includes(ext);
+        })
+        .map(file => ({
+            name: file,
+            size: fs.statSync(path.join(sessionDir, file)).size
+        }));
+
+    // Trigger AI analysis in the background
+    setTimeout(() => {
+        // In Docker environment, call the AI service via HTTP instead of exec
+        fetch(`http://ai_service:5001/analyze/${sessionId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log(`AI analysis started for session ${sessionId}:`, data);
+        })
+        .catch(error => {
+            console.error(`Error triggering AI analysis: ${error}`);
+        });
+    }, 100); // Small delay to ensure files are properly written
 
     res.json({ sessionId, totalFiles: validFiles.length });
 });
@@ -125,6 +199,35 @@ app.get('/sessions/:sessionId/files/:filename', (req, res) => {
     }
 
     res.sendFile(filePath);
+});
+
+// Получение результатов анализа для сессии
+app.get('/analysis/:sessionId/results', (req, res) => {
+    const sessionId = req.params.sessionId;
+    const sessionDir = path.join(sessionsDir, sessionId);
+    const resultsPath = path.join(sessionDir, 'results.json');
+
+    if (!fs.existsSync(resultsPath)) {
+        return res.status(404).json({ error: 'Результаты анализа не найдены' });
+    }
+
+    const results = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+    res.json(results);
+});
+
+// Получение статуса анализа для сессии
+app.get('/analysis/:sessionId/status', (req, res) => {
+    const sessionId = req.params.sessionId;
+    const sessionDir = path.join(sessionsDir, sessionId);
+    const resultsPath = path.join(sessionDir, 'results.json');
+
+    // Check if results exist
+    if (fs.existsSync(resultsPath)) {
+        return res.json({ status: 'completed' });
+    }
+
+    // Otherwise, analysis is in progress
+    res.json({ status: 'processing' });
 });
 
 app.listen(port, () => {

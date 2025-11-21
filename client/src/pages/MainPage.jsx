@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Typography, Button, LinearProgress, Paper, Grid, Container } from '@mui/material';
 import { CloudUpload, ArrowBack } from '@mui/icons-material';
+import Instructions from "../components/Instructions";
 
 const MainPage = () => {
     const [isDragging, setIsDragging] = useState(false);
@@ -191,6 +192,7 @@ const MainPage = () => {
                     Начать анализ
                 </Button>
             </Box>
+            <Instructions/>
         </Container>
     );
 };

@@ -1,0 +1,57 @@
+# Docker Compose file for Power Line Maintenance System
+# Uses compose specification version 3.8
+version: '3.8'
+
+services:
+  # Client (React app)
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    networks:
+      - app-network
+
+  # Server (Node.js backend)
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./server/sessions:/app/sessions  # Persistent storage for sessions
+      - ./server/uploads:/app/uploads   # Persistent storage for uploads
+      - ./ai_model/yolov8s.pt:/app/yolov8s.pt  # Mount the AI model
+    environment:
+      - NODE_ENV=production
+    networks:
+      - app-network
+
+  # AI Model Service (Python with YOLOv8)
+  ai_service:
+    build:
+      context: ./ai_model
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./ai_model/yolov8s.pt:/app/yolov8s.pt  # Mount the AI model
+      - ./server/sessions:/app/sessions  # Access to session files
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  sessions:
+    driver: local
+  uploads:
+    driver: local

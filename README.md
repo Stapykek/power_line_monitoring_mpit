@@ -4,7 +4,16 @@ This project was bootstrapped with [Create React App](https://github.com/faceboo
 
 ## Команды
 
-### `npm start`
+```bash
+cd client
+npm start
+```
 
+```bash
+cd server
+npm start
+```
+
+(Выше - две разных инстанса терминала)
 Запустить проект в dev-режиме\
 [http://localhost:3000](http://localhost:3000) - просмотр в браузере

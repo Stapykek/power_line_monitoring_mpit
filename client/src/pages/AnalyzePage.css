@@ -1,0 +1,181 @@
+
+.analyze-page {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 2rem;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    text-align: center;
+}
+
+.analyze-page h1 {
+    color: #1a3a5e;
+    margin-bottom: 0.5rem;
+}
+
+.analyze-page p {
+    color: #555;
+    font-size: 1.1rem;
+    margin: 1rem 0;
+}
+
+/* Галерея */
+.gallery {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin: 2rem auto;
+    max-width: 1100px;
+}
+
+.gallery-item {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.gallery-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.gallery-item img {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    display: block;
+}
+
+.image-name {
+    padding: 0.6rem;
+    font-size: 0.9rem;
+    color: #333;
+    word-break: break-word;
+    margin: 0;
+    background-color: white;
+}
+
+/* Пагинация */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 2rem 0;
+}
+
+.pagination button {
+    padding: 0.6rem 1rem;
+    border: 1px solid #ddd;
+    background-color: white;
+    border-radius: 6px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.pagination button:hover:not(:disabled) {
+    background-color: #f0f0f0;
+}
+
+.pagination button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pagination button.active {
+    background-color: #0066cc;
+    color: white;
+    border-color: #0066cc;
+}
+
+/* Модальное окно */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.85);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    padding: 1rem;
+}
+
+.modal-content {
+    position: relative;
+    max-width: 90vw;
+    max-height: 90vh;
+    background-color: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.close {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    font-size: 2rem;
+    font-weight: bold;
+    color: #aaa;
+    cursor: pointer;
+    z-index: 1001;
+}
+
+.close:hover {
+    color: #000;
+}
+
+.modal-image {
+    max-width: 100%;
+    max-height: 70vh;
+    display: block;
+    object-fit: contain;
+}
+
+.modal-name {
+    padding: 1rem;
+    text-align: center;
+    font-size: 1rem;
+    color: #333;
+    background-color: #f8f9fa;
+    margin: 0;
+}
+
+/* Кнопка назад */
+.back-button {
+    margin-top: 3rem;
+    padding: 0.8rem 1.5rem;
+    font-size: 1rem;
+    background-color: #0066cc;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .gallery {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+
+    .gallery-item img {
+        height: 140px;
+    }
+
+    .pagination {
+        flex-wrap: wrap;
+        gap: 0.3rem;
+    }
+
+    .pagination button {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.9rem;
+    }
+}

@@ -20,12 +20,15 @@ import {
   Collapse,
   Chip,
   Divider,
-  Stack
+  Stack,
+  Switch,
+  FormControlLabel
 } from '@mui/material';
 import { ArrowBack, ExpandMore, ExpandLess, Close, ZoomIn, ZoomOut, ZoomOutMap } from '@mui/icons-material';
 import { styled } from '@mui/system';
 import EXIF from 'exif-js';
 import BoundingBoxOverlay from '../components/BoundingBoxOverlay';
+import SegmentationOverlay from '../components/SegmentationOverlay';
 import SessionAnalyticsWidget from '../components/SessionAnalyticsWidget';
 
 // Helper function to extract EXIF data from image
@@ -147,6 +150,10 @@ const AnalyzePage = () => {
   const imageContainerRef = useRef(null);
   const imageRef = useRef(null);
   const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
+  
+  // State for segmentation
+  const [segmentationEnabled, setSegmentationEnabled] = useState(false);
+  const [maskCache, setMaskCache] = useState({});
 
   useEffect(() => {
     // Get sessionId from URL
@@ -332,6 +339,39 @@ const AnalyzePage = () => {
       }
     }));
   };
+  
+  // Function to fetch segmentation mask for an image
+  const fetchSegmentationMask = async (sessionId, filename) => {
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+      const maskFilename = `${filename.split('.')[0]}_mask.png`;
+      const maskUrl = `${apiUrl}/sessions/${sessionId}/masks/${maskFilename}`;
+      
+      // Check if mask exists by trying to fetch it
+      const response = await fetch(maskUrl);
+      if (response.ok) {
+        return maskUrl;
+      } else {
+        return null;
+      }
+    } catch (error) {
+      console.error('Error fetching segmentation mask:', error);
+      return null;
+    }
+  };
+  
+  // Function to check segmentation status for the session
+  const checkSegmentationStatus = async (sessionId) => {
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${apiUrl}/analysis/${sessionId}/segmentation-status`);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error checking segmentation status:', error);
+      return { status: 'error' };
+    }
+  };
 
   // Delete classification
   const deleteClassification = (imageName, objectId) => {
@@ -404,17 +444,30 @@ const AnalyzePage = () => {
       };
     }
   }, [isDragging, dragStart]);
+  
+  // Effect to load segmentation mask when segmentation is enabled and image changes
+  useEffect(() => {
+    const loadMask = async () => {
+      if (selectedImage && segmentationEnabled && sessionId) {
+        // Check if mask is already in cache
+        if (!maskCache[selectedImage.name]) {
+          const maskUrl = await fetchSegmentationMask(sessionId, selectedImage.name);
+          if (maskUrl) {
+            setMaskCache(prev => ({
+              ...prev,
+              [selectedImage.name]: maskUrl
+            }));
+          }
+        }
+      }
+    };
+    
+    loadMask();
+  }, [selectedImage, segmentationEnabled, sessionId, maskCache]);
 
   return (
     <Box sx={{ backgroundColor: '#EEEEEE', minHeight: '100vh', pt: 0, pb: 2 }}>
       <Container maxWidth="lg">
-        <Button
-          startIcon={<ArrowBack />}
-          onClick={() => navigate('/')}
-          sx={{ mb: 2 }}
-        >
-          Назад
-        </Button>
 
         <Typography variant="h4" gutterBottom sx={{ mb: 2 }}>
           Анализ изображений
@@ -429,9 +482,6 @@ const AnalyzePage = () => {
               </Box>
             ) : (
               <>
-                <Typography variant="body1" color="textSecondary" gutterBottom>
-                  Всего загружено: {files.length} изображений
-                </Typography>
 
                 {/* Analysis Status */}
                 {analysisStatus === 'processing' && (
@@ -443,13 +493,6 @@ const AnalyzePage = () => {
                   </Box>
                 )}
 
-                {analysisStatus === 'completed' && (
-                  <Box sx={{ mt: 2, mb: 2 }}>
-                    <Typography variant="body1" color="primary" sx={{ fontWeight: 'bold' }}>
-                      Анализ завершен! Найденные объекты отображаются на изображениях.
-                    </Typography>
-                  </Box>
-                )}
 
                 <ImageGrid container spacing={2} justifyContent="center">
                   {currentImages.map((file, index) => (
@@ -496,6 +539,8 @@ const AnalyzePage = () => {
             startTime={processingStartTime}
             endTime={processingEndTime}
             sessionId={sessionId}
+            segmentationEnabled={segmentationEnabled}
+            onSegmentationToggle={(e) => setSegmentationEnabled(e.target.checked)}
           />
         </Box>
 
@@ -560,7 +605,7 @@ const AnalyzePage = () => {
                     onClick={zoomIn}
                     sx={{
                       color: 'white',
-                      backgroundColor: 'rgba(0,0,0,0.5)',
+                      backgroundColor: 'rgba(0,0,0.5)',
                       '&:hover': { backgroundColor: 'rgba(0,0,0,0.7)' }
                     }}
                   >
@@ -570,7 +615,7 @@ const AnalyzePage = () => {
                     onClick={zoomOut}
                     sx={{
                       color: 'white',
-                      backgroundColor: 'rgba(0,0,0.5)',
+                      backgroundColor: 'rgba(0,0,0,0.5)',
                       '&:hover': { backgroundColor: 'rgba(0,0,0,0.7)' }
                     }}
                   >
@@ -586,6 +631,7 @@ const AnalyzePage = () => {
                   >
                     <ZoomOutMap />
                   </IconButton>
+                  
                 </Box>
                 
                 {/* Container for image and overlay with the same transformation */}
@@ -612,12 +658,23 @@ const AnalyzePage = () => {
                       ref={imageRef}
                       src={`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/sessions/${sessionId}/files/${selectedImage.name}`}
                       alt={selectedImage.name}
-                      onLoad={(e) => {
+                      onLoad={async (e) => {
                         // Set the original image dimensions when the image loads
                         setImageDimensions({
                           width: e.target.naturalWidth,
                           height: e.target.naturalHeight
                         });
+                        
+                        // Preload segmentation mask if segmentation is enabled
+                        if (segmentationEnabled && !maskCache[selectedImage.name]) {
+                          const maskUrl = await fetchSegmentationMask(sessionId, selectedImage.name);
+                          if (maskUrl) {
+                            setMaskCache(prev => ({
+                              ...prev,
+                              [selectedImage.name]: maskUrl
+                            }));
+                          }
+                        }
                       }}
                       style={{
                         width: '100%',
@@ -629,25 +686,36 @@ const AnalyzePage = () => {
                         zIndex: 1
                       }}
                     />
-                    {/* Bounding Box Overlay - positioned at the same level as the image */}
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        zIndex: 2 // Above the image but below controls
-                      }}
-                    >
-                      {imageAnalytics[selectedImage.name] && imageAnalytics[selectedImage.name].objects && (
+                    
+                    {/* Segmentation Overlay - shown when segmentation is enabled */}
+                    {segmentationEnabled && maskCache[selectedImage.name] && (
+                      <SegmentationOverlay
+                        imageRef={imageRef}
+                        maskSrc={maskCache[selectedImage.name]}
+                        imageDimensions={imageDimensions}
+                        segmentationVisible={segmentationEnabled}
+                      />
+                    )}
+                    
+                    {/* Bounding Box Overlay - hidden when segmentation is enabled */}
+                    {!segmentationEnabled && imageAnalytics[selectedImage.name] && imageAnalytics[selectedImage.name].objects && (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          zIndex: 2 // Above the image but below controls
+                        }}
+                      >
                         <BoundingBoxOverlay
                           imageRef={imageRef}
                           objects={imageAnalytics[selectedImage.name].objects}
                           imageDimensions={imageDimensions}
                         />
-                      )}
-                    </Box>
+                      </Box>
+                    )}
                   </Box>
                 </Box>
               </Box>

@@ -197,6 +197,39 @@ app.get('/sessions/:sessionId/files/:filename', (req, res) => {
     res.sendFile(filePath);
 });
 
+// Получение маски сегментации для изображения
+app.get('/sessions/:sessionId/masks/:filename', (req, res) => {
+    const sessionId = req.params.sessionId;
+    const filename = req.params.filename;
+    const maskPath = path.join(sessionsDir, sessionId, 'masks', filename);
+
+    if (!fs.existsSync(maskPath)) {
+        return res.status(404).json({ error: 'Маска не найдена' });
+    }
+
+    res.sendFile(maskPath);
+});
+
+// Получение статуса сегментации для сессии
+app.get('/analysis/:sessionId/segmentation-status', async (req, res) => {
+    const sessionId = req.params.sessionId;
+    
+    try {
+        const statusData = await aiServiceClient.getSegmentationStatus(sessionId);
+        res.json(statusData);
+    } catch (error) {
+        // If there's an error contacting the AI service, return a default status
+        console.error(`Error getting segmentation status from AI service: ${error}`);
+        const sessionDir = path.join(sessionsDir, sessionId);
+        const masksDir = path.join(sessionDir, 'masks');
+        if (fs.existsSync(masksDir)) {
+            res.json({ status: 'completed' });
+        } else {
+            res.json({ status: 'pending' });
+        }
+    }
+});
+
 // Получение результатов анализа для сессии
 app.get('/analysis/:sessionId/results', async (req, res) => {
     const sessionId = req.params.sessionId;

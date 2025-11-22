@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 import time
 
 from inference import YOLOInference
+from segmentation import create_segmentation_masks
 
 app = FastAPI(title="Power Line Maintenance AI Service", version="1.0.0")
 
@@ -28,6 +29,7 @@ SESSIONS_DIR = "C:\\Users\\1\\Desktop\\power_line_maintenance\\server\\sessions"
 
 # Store processing status
 processing_status = {}
+segmentation_status = {}
 
 class DetectionResult(BaseModel):
     class_name: str
@@ -84,6 +86,85 @@ async def analyze_session(session_id: str, background_tasks: BackgroundTasks):
         }
     )
 
+@app.post("/segment/{session_id}")
+async def segment_session(session_id: str, background_tasks: BackgroundTasks):
+    """
+    Create segmentation masks for detected defects in a session
+    """
+    session_path = Path(SESSIONS_DIR) / session_id
+    results_path = session_path / "results.json"
+    
+    if not results_path.exists():
+        raise HTTPException(status_code=404, detail="Detection results not found. Run analysis first.")
+    
+    # Initialize segmentation status
+    segmentation_status[session_id] = {
+        "status": "processing",
+        "start_time": time.time()
+    }
+    
+    # Process segmentation in background
+    background_tasks.add_task(process_segmentation_background, session_id, str(session_path), str(results_path))
+    
+    return JSONResponse(
+        content={
+            "session_id": session_id,
+            "message": "Started segmentation processing"
+        }
+    )
+
+def process_segmentation_background(session_id: str, session_path: str, results_path: str):
+    """
+    Process segmentation in the background
+    """
+    try:
+        # Initialize segmentation status if it doesn't exist
+        if session_id not in segmentation_status:
+            segmentation_status[session_id] = {
+                "status": "processing",
+                "start_time": time.time()
+            }
+        
+        # Create segmentation masks
+        result = create_segmentation_masks(
+            session_id=session_id,
+            session_path=session_path,
+            results_path=results_path
+        )
+        
+        # Update segmentation status
+        segmentation_status[session_id].update({
+            "status": "completed",
+            "end_time": time.time(),
+            "processed_images": result["processed_images"],
+            "total_defects_masked": result["total_defects_masked"],
+            "masks_directory": result["masks_directory"]
+        })
+        
+        print(f"✅ Segmentation completed for session {session_id}")
+    except Exception as e:
+        print(f"❌ Error during segmentation for session {session_id}: {str(e)}")
+        # Initialize the status if it doesn't exist before accessing it
+        if session_id not in segmentation_status:
+            segmentation_status[session_id] = {}
+        segmentation_status[session_id]["status"] = "error"
+        segmentation_status[session_id]["error"] = str(e)
+
+@app.get("/segmentation-status/{session_id}")
+async def get_segmentation_status(session_id: str):
+    """
+    Get segmentation processing status for a session
+    """
+    if session_id in segmentation_status:
+        return JSONResponse(content=segmentation_status[session_id])
+    else:
+        session_path = Path(SESSIONS_DIR) / session_id
+        masks_path = session_path / "masks"
+        if masks_path.exists():
+            return JSONResponse(content={"status": "completed"})
+        else:
+            raise HTTPException(status_code=404, detail="Segmentation not found for this session")
+
 def process_images_background(session_id: str, image_files: List[Path]):
     """
     Process images in the background and save results to JSON
@@ -134,6 +215,26 @@ def process_images_background(session_id: str, image_files: List[Path]):
     # Save results to JSON file
     with open(results_path, 'w', encoding='utf-8') as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
+    
+    # Automatically trigger segmentation after detection is complete
+    try:
+        from threading import Thread
+        def run_segmentation():
+            import time
+            # Add a small delay to ensure the results file is fully written
+            time.sleep(1)
+            # Initialize segmentation status for this session when running automatically
+            if session_id not in segmentation_status:
+                segmentation_status[session_id] = {
+                    "status": "processing",
+                    "start_time": time.time()
+                }
+            process_segmentation_background(session_id, str(session_path), str(results_path))
+        
+        thread = Thread(target=run_segmentation)
+        thread.start()
+    except Exception as e:
+        print(f"Error starting segmentation after detection: {str(e)}")
 
 def process_single_image(image_path: str) -> List[Dict[str, Any]]:
     """

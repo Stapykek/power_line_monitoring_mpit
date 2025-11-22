@@ -1,8 +1,15 @@
 import React from 'react';
 import { Box, Typography, IconButton } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 import { NotificationsOutlined, AccountCircleOutlined, MapOutlined } from '@mui/icons-material';
 
 const HeaderBar = () => {
+  const navigate = useNavigate();
+
+  const handleLogoClick = () => {
+    navigate('/');
+  };
+
   return (
     <Box
       sx={{
@@ -28,16 +35,20 @@ const HeaderBar = () => {
           sx={{
             height: 32,
             width: 32,
+            cursor: 'pointer',
           }}
+          onClick={handleLogoClick}
         />
         <Typography
           variant="h6"
           sx={{
             color: 'white',
-            fontFamily: 'Rozha One, serif',
+            fontFamily: '"Rozha One", serif', // Using quotes around the font name
             fontWeight: 'normal',
-            fontSize: '1.5rem',
+            fontSize: '32px', // Set font size to 32px
+            cursor: 'pointer',
           }}
+          onClick={handleLogoClick}
         >
           VisorAI
         </Typography>

@@ -100,6 +100,29 @@ class AIServiceClient {
       throw error;
     }
   }
+
+  /**
+   * Get segmentation status for a session
+   * @param {string} sessionId - The session ID to get segmentation status for
+   * @returns {Promise<Object>} Segmentation status data
+   */
+  async getSegmentationStatus(sessionId) {
+    try {
+      const response = await fetch(`${this.aiServiceUrl}/segmentation-status/${sessionId}`);
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Segmentation status not found');
+        }
+        throw new Error(`AI service returned status ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`Error getting segmentation status for session ${sessionId}:`, error);
+      throw error;
+    }
+  }
 }
 
 module.exports = AIServiceClient;

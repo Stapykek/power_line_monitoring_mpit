@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -27,16 +27,41 @@ import {
 } from '@mui/icons-material';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
-const SessionAnalyticsWidget = ({ files, imageAnalytics, analysisStatus, startTime, endTime }) => {
+const SessionAnalyticsWidget = ({ files, imageAnalytics, analysisStatus, startTime, endTime, sessionId }) => {
   // State for expanded blocks
   const [expandedBlocks, setExpandedBlocks] = useState({
     sessionInfo: true,
     criticality: true
   });
 
-  // State for session name editing
+  // State for session name editing and upload time
   const [sessionName, setSessionName] = useState('Сессия анализа');
   const [isEditingName, setIsEditingName] = useState(false);
+  const [uploadTime, setUploadTime] = useState(null);
+
+  // Fetch upload time from metadata when component mounts
+  useEffect(() => {
+    const fetchUploadTime = async () => {
+      if (sessionId) {
+        try {
+          const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+          const response = await fetch(`${apiUrl}/sessions/${sessionId}/files/metadata.json`);
+          if (response.ok) {
+            const metadata = await response.json();
+            setUploadTime(metadata.upload_time || null);
+          } else {
+            // Fallback to current date if metadata not found
+            setUploadTime(new Date().toISOString());
+          }
+        } catch (error) {
+          console.error('Error fetching upload time:', error);
+          setUploadTime(new Date().toISOString());
+        }
+      }
+    };
+
+    fetchUploadTime();
+  }, [sessionId]);
 
   // Toggle block expansion
   const toggleBlock = (blockName) => {
@@ -113,7 +138,7 @@ const SessionAnalyticsWidget = ({ files, imageAnalytics, analysisStatus, startTi
 
     return [
       { name: 'Низкая', value: criticalityCount['Низкая'], color: '#4caf50' },
-      { name: 'Средняя', value: criticalityCount['Средняя'], color: '#ff980' },
+      { name: 'Средняя', value: criticalityCount['Средняя'], color: '#ff9800' },
       { name: 'Высокая', value: criticalityCount['Высокая'], color: '#f44336' }
     ];
   };
@@ -216,9 +241,9 @@ const SessionAnalyticsWidget = ({ files, imageAnalytics, analysisStatus, startTi
                 <ListItemIcon sx={{ minWidth: '30px', marginRight: 1 }}>
                   <AccountCircleOutlined fontSize="small" />
                 </ListItemIcon>
-                <ListItemText 
-                  primary="Дата загрузки" 
-                  secondary={formatDate(new Date())}
+                <ListItemText
+                  primary="Дата загрузки"
+                  secondary={formatDate(uploadTime)}
                 />
               </ListItem>
               
@@ -406,18 +431,16 @@ const SessionAnalyticsWidget = ({ files, imageAnalytics, analysisStatus, startTi
                       data={criticalityData}
                       cx="50%"
                       cy="50%"
-                      labelLine={false}
+                      innerRadius={50}
                       outerRadius={80}
-                      fill="#8884d8"
+                      paddingAngle={2}
                       dataKey="value"
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                     >
                       {criticalityData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
                     <Tooltip formatter={(value) => [value, 'Количество']} />
-                    <Legend />
                   </PieChart>
                 </ResponsiveContainer>
               </Box>

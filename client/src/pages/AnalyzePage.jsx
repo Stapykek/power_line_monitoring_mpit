@@ -406,7 +406,7 @@ const AnalyzePage = () => {
   }, [isDragging, dragStart]);
 
   return (
-    <Box sx={{ backgroundColor: '#EEEEEE', minHeight: '100vh', py: 2 }}>
+    <Box sx={{ backgroundColor: '#EEEEEE', minHeight: '100vh', pt: 0, pb: 2 }}>
       <Container maxWidth="lg">
         <Button
           startIcon={<ArrowBack />}
@@ -495,6 +495,7 @@ const AnalyzePage = () => {
             analysisStatus={analysisStatus}
             startTime={processingStartTime}
             endTime={processingEndTime}
+            sessionId={sessionId}
           />
         </Box>
 

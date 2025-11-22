@@ -19,13 +19,13 @@ from segmentation import create_segmentation_masks
 app = FastAPI(title="Power Line Maintenance AI Service", version="1.0.0")
 
 # Initialize the YOLO inference class
-MODEL_PATH = "C:\\Users\\1\\Desktop\\power_line_maintenance\\ai_model\\ai_model\\best.pt"
+MODEL_PATH = "ai_model\\best.pt"
 print(Path(MODEL_PATH))
 inference = YOLOInference(MODEL_PATH, confidence_threshold=0.4)
 
 
 # Configuration
-SESSIONS_DIR = "C:\\Users\\1\\Desktop\\power_line_maintenance\\server\\sessions"
+SESSIONS_DIR = "../server/sessions"
 
 # Store processing status
 processing_status = {}

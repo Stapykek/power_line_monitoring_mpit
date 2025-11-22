@@ -1,6 +1,6 @@
 # Запуск
 
-## 1. скачайте модель SAM: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth, переименуйте файл в sam.pth и поместите его в ai_model/ai_model
+## 1. скачайте модель SAM: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth, и поместите его в ai_model/ai_model. Либо скачайте другую версию SAM, но переименуйте файл в sam_vit_b_01ec64.pth
 ## 2. Последовательно запустите следующие последовательности команд в разных экземплярах терминала
 Запуск ИИ-микросервиса:
 ```bash

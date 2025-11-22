@@ -25,6 +25,8 @@ import {
 import { ArrowBack, ExpandMore, ExpandLess, Close, ZoomIn, ZoomOut, ZoomOutMap } from '@mui/icons-material';
 import { styled } from '@mui/system';
 import EXIF from 'exif-js';
+import BoundingBoxOverlay from '../components/BoundingBoxOverlay';
+import SessionAnalyticsWidget from '../components/SessionAnalyticsWidget';
 
 // Helper function to extract EXIF data from image
 const getExifData = (imageSrc) => {
@@ -99,7 +101,7 @@ const ImageItem = styled(Paper)(({ theme }) => ({
   transition: 'transform 0.2s',
   '&:hover': {
     transform: 'scale(1.02)'
-  }
+ }
 }));
 
 const StyledDialog = styled(Dialog)(({ theme }) => ({
@@ -132,13 +134,19 @@ const AnalyzePage = () => {
   const [imageAnalytics, setImageAnalytics] = useState({});
   const [loadingAnalytics, setLoadingAnalytics] = useState({});
   const [analysisStatus, setAnalysisStatus] = useState('pending'); // pending, processing, completed
+  
+  // State for processing times
+  const [processingStartTime, setProcessingStartTime] = useState(null);
+  const [processingEndTime, setProcessingEndTime] = useState(null);
 
   // State for image zoom and drag
-  const [zoomLevel, setZoomLevel] = useState(1);
+ const [zoomLevel, setZoomLevel] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const imageContainerRef = useRef(null);
+  const imageRef = useRef(null);
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     // Get sessionId from URL
@@ -149,7 +157,8 @@ const AnalyzePage = () => {
     // Load session files
     const fetchFiles = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/sessions/${sessionId}/files`);
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+        const response = await fetch(`${apiUrl}/sessions/${sessionId}/files`);
         const data = await response.json();
         setFiles(data);
         
@@ -157,7 +166,7 @@ const AnalyzePage = () => {
         const analytics = {};
         const promises = data.map(async (file) => {
           // Get image URL
-          const imageUrl = `http://localhost:5000/sessions/${sessionId}/files/${file.name}`;
+          const imageUrl = `${apiUrl}/sessions/${sessionId}/files/${file.name}`;
           
           // Extract EXIF data from image
           const exifData = await getExifData(imageUrl);
@@ -188,28 +197,35 @@ const AnalyzePage = () => {
   }, [location.search]);
 
   // Function to check analysis status and fetch results when available
-  const checkAnalysisStatus = async (sessionId) => {
-    try {
-      const statusResponse = await fetch(`http://localhost:5000/analysis/${sessionId}/status`);
-      const statusData = await statusResponse.json();
-      
-      if (statusData.status === 'completed') {
-        // Fetch AI results
-        const resultsResponse = await fetch(`http://localhost:5000/analysis/${sessionId}/results`);
-        const resultsData = await resultsResponse.json();
-        updateImageAnalyticsWithAIResults(resultsData);
-        setAnalysisStatus('completed');
-      } else {
-        // Set status to processing and schedule a check in 2 seconds
-        setAnalysisStatus('processing');
+    const checkAnalysisStatus = async (sessionId) => {
+      try {
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+        const statusResponse = await fetch(`${apiUrl}/analysis/${sessionId}/status`);
+        const statusData = await statusResponse.json();
+        
+        if (statusData.status === 'completed') {
+          // Set processing end time when analysis completes
+          setProcessingEndTime(new Date());
+          // Fetch AI results
+          const resultsResponse = await fetch(`${apiUrl}/analysis/${sessionId}/results`);
+          const resultsData = await resultsResponse.json();
+          updateImageAnalyticsWithAIResults(resultsData);
+          setAnalysisStatus('completed');
+        } else {
+          // Set processing start time when first transitioning to processing state
+          if (analysisStatus === 'pending') {
+            setProcessingStartTime(new Date());
+          }
+          // Set status to processing and schedule a check in 2 seconds
+          setAnalysisStatus('processing');
+          setTimeout(() => checkAnalysisStatus(sessionId), 2000);
+        }
+      } catch (error) {
+        console.error('Error checking analysis status:', error);
+        // Retry after 2 seconds
         setTimeout(() => checkAnalysisStatus(sessionId), 2000);
       }
-    } catch (error) {
-      console.error('Error checking analysis status:', error);
-      // Retry after 2 seconds
-      setTimeout(() => checkAnalysisStatus(sessionId), 2000);
-    }
-  };
+    };
 
   // Function to determine criticality based on class and confidence
   const getCriticality = (className, confidence) => {
@@ -218,10 +234,11 @@ const AnalyzePage = () => {
       'vibration_damper': 3,
       'bad_insulator': 5,
       'traverse': 1,
-      'broken_insulator': 5,
-      'missing_bolt': 4,
-      'corrosion': 3,
-      'crack': 4
+      'damaged_insulator': 3,
+      'festoon_insulator': 1,
+      'polymer_insulator': 1,
+      'nest': 2,
+      'safety_sign+': 2
     };
     
     // Get base criticality from class
@@ -252,6 +269,7 @@ const AnalyzePage = () => {
             class: detection.class,
             confidence: detection.confidence,
             criticality: getCriticality(detection.class, detection.confidence),
+            bbox: detection.bbox, // [x1, y1, x2, y2] coordinates
             showBoundingBox: true // Show bounding box by default
           }));
         }
@@ -298,7 +316,7 @@ const AnalyzePage = () => {
       ...prev,
       [key]: !prev[key]
     }));
-  };
+ };
 
   // Toggle bounding box visibility
   const toggleBoundingBox = (imageName, objectId) => {
@@ -388,146 +406,160 @@ const AnalyzePage = () => {
   }, [isDragging, dragStart]);
 
   return (
-    <Container maxWidth="lg" sx={{ py: 2 }}>
-      <Button
-        startIcon={<ArrowBack />}
-        onClick={() => navigate('/')}
-        sx={{ mb: 2 }}
-      >
-        Назад
-      </Button>
-
-      <Typography variant="h4" gutterBottom sx={{ mb: 2 }}>
-        Анализ изображений
-      </Typography>
-
-      {isLoading ? (
-        <Box sx={{ mt: 3 }}>
-          <Typography variant="body1">Загрузка изображений...</Typography>
-          <LinearProgress variant="indeterminate" sx={{ mt: 1 }} />
-        </Box>
-      ) : (
-        <>
-          <Typography variant="body1" color="textSecondary" gutterBottom>
-            Всего загружено: {files.length} изображений
-          </Typography>
-
-          {/* Analysis Status */}
-          {analysisStatus === 'processing' && (
-            <Box sx={{ mt: 2, mb: 2 }}>
-              <Typography variant="body1" color="textSecondary">
-                Выполняется анализ изображений...
-              </Typography>
-              <LinearProgress variant="indeterminate" sx={{ mt: 1 }} />
-            </Box>
-          )}
-
-          {analysisStatus === 'completed' && (
-            <Box sx={{ mt: 2, mb: 2 }}>
-              <Typography variant="body1" color="primary" sx={{ fontWeight: 'bold' }}>
-                Анализ завершен! Найденные объекты отображаются на изображениях.
-              </Typography>
-            </Box>
-          )}
-
-          <ImageGrid container spacing={2} justifyContent="center">
-            {currentImages.map((file, index) => (
-              <Grid item xs={4} key={index}>
-                <ImageItem onClick={() => openImage(file)}>
-                  <img
-                    src={`http://localhost:5000/sessions/${sessionId}/files/${file.name}`}
-                    alt={file.name}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover'
-                    }}
-                  />
-                </ImageItem>
-              </Grid>
-            ))}
-          </ImageGrid>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-              <Pagination
-                count={totalPages}
-                page={currentPage}
-                onChange={handlePageChange}
-                color="primary"
-                size="large"
-              />
-            </Box>
-          )}
-        </>
-      )}
-
-      {/* Detailed Image View */}
-      {selectedImage && imageAnalytics[selectedImage.name] && (
-        <StyledDialog
-          open={!!selectedImage}
-          onClose={closeImage}
-          maxWidth={false}
-          fullWidth={false}
-          sx={{
-            '& .MuiDialog-paper': {
-              width: selectedImage && imageAnalytics[selectedImage.name] && imageAnalytics[selectedImage.name].resolution !== "Unknown" ?
-                `calc(${parseInt(imageAnalytics[selectedImage.name].resolution.split('x')[0]) / 8}vw + 300px + 32px)` : 'auto',
-              maxWidth: '90vw'
-            }
-          }}
+    <Box sx={{ backgroundColor: '#EEEEEE', minHeight: '100vh', py: 2 }}>
+      <Container maxWidth="lg">
+        <Button
+          startIcon={<ArrowBack />}
+          onClick={() => navigate('/')}
+          sx={{ mb: 2 }}
         >
-          <DialogContent dividers>
-            <Box sx={{ display: 'flex', height: '100%' }}>
-              {/* Image Viewer */}
-              <Box
-                ref={imageContainerRef}
-                sx={{
-                  flex: 1,
-                  position: 'relative',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'auto',
-                  cursor: isDragging ? 'grabbing' : 'grab'
-                }}
-                onMouseDown={handleMouseDown}
-              >
-                <IconButton
-                  onClick={closeImage}
-                  sx={{
-                    position: 'absolute',
-                    top: 8,
-                    right: 8,
-                    color: 'white',
-                    backgroundColor: 'rgba(0,0,0,0.5)',
-                    zIndex: 10,
-                    '&:hover': { backgroundColor: 'rgba(0,0,0,0.7)' }
-                  }}
-                >
-                  <Close />
-                </IconButton>
-                
-                {/* Zoom Controls */}
+          Назад
+        </Button>
+
+        <Typography variant="h4" gutterBottom sx={{ mb: 2 }}>
+          Анализ изображений
+        </Typography>
+
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ flex: 1 }}>
+            {isLoading ? (
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="body1">Загрузка изображений...</Typography>
+                <LinearProgress variant="indeterminate" sx={{ mt: 1 }} />
+              </Box>
+            ) : (
+              <>
+                <Typography variant="body1" color="textSecondary" gutterBottom>
+                  Всего загружено: {files.length} изображений
+                </Typography>
+
+                {/* Analysis Status */}
+                {analysisStatus === 'processing' && (
+                  <Box sx={{ mt: 2, mb: 2 }}>
+                    <Typography variant="body1" color="textSecondary">
+                      Выполняется анализ изображений...
+                    </Typography>
+                    <LinearProgress variant="indeterminate" sx={{ mt: 1 }} />
+                  </Box>
+                )}
+
+                {analysisStatus === 'completed' && (
+                  <Box sx={{ mt: 2, mb: 2 }}>
+                    <Typography variant="body1" color="primary" sx={{ fontWeight: 'bold' }}>
+                      Анализ завершен! Найденные объекты отображаются на изображениях.
+                    </Typography>
+                  </Box>
+                )}
+
+                <ImageGrid container spacing={2} justifyContent="center">
+                  {currentImages.map((file, index) => (
+                    <Grid item xs={4} key={index}>
+                      <ImageItem onClick={() => openImage(file)}>
+                        <img
+                          src={`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/sessions/${sessionId}/files/${file.name}`}
+                          alt={file.name}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover'
+                          }}
+                        />
+                      </ImageItem>
+                    </Grid>
+                  ))}
+                </ImageGrid>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+                    <Pagination
+                      count={totalPages}
+                      page={currentPage}
+                      onChange={handlePageChange}
+                      color="primary"
+                      size="large"
+                    />
+                  </Box>
+                )}
+              </>
+            )}
+          </Box>
+
+          {/* Session Analytics Widget */}
+          <SessionAnalyticsWidget
+            files={files}
+            imageAnalytics={imageAnalytics}
+            analysisStatus={analysisStatus}
+            startTime={processingStartTime}
+            endTime={processingEndTime}
+          />
+        </Box>
+
+        {/* Detailed Image View */}
+        {selectedImage && imageAnalytics[selectedImage.name] && (
+          <StyledDialog
+            open={!!selectedImage}
+            onClose={closeImage}
+            maxWidth={false}
+            fullWidth={false}
+            sx={{
+              '& .MuiDialog-paper': {
+                width: selectedImage && imageAnalytics[selectedImage.name] && imageAnalytics[selectedImage.name].resolution !== "Unknown" ?
+                  `calc(${parseInt(imageAnalytics[selectedImage.name].resolution.split('x')[0]) / 8}vw + 300px + 32px)` : 'auto',
+                maxWidth: '90vw'
+              }
+            }}
+          >
+            <DialogContent dividers>
+              <Box sx={{ display: 'flex', height: '100%' }}>
+                {/* Image Viewer */}
                 <Box
+                  ref={imageContainerRef}
                   sx={{
-                    position: 'absolute',
-                    top: 8,
-                    left: 8,
-                    zIndex: 10,
+                    flex: 1,
+                    position: 'relative',
                     display: 'flex',
-                    gap: 1
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'auto',
+                    cursor: isDragging ? 'grabbing' : 'grab'
                   }}
+                  onMouseDown={handleMouseDown}
                 >
+                  <IconButton
+                    onClick={closeImage}
+                    sx={{
+                      position: 'absolute',
+                      top: 8,
+                      right: 8,
+                      color: 'white',
+                      backgroundColor: 'rgba(0,0,0.5)',
+                      zIndex: 10,
+                      '&:hover': { backgroundColor: 'rgba(0,0,0,0.7)' }
+                    }}
+                  >
+                    <Close />
+                  </IconButton>
+                  
+                  {/* Zoom Controls */}
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 8,
+                      left: 8,
+                      zIndex: 10,
+                      display: 'flex',
+                      gap: 1
+                    }}
+                  >
                   <IconButton
                     onClick={zoomIn}
                     sx={{
                       color: 'white',
-                      backgroundColor: 'rgba(0,0,0.5)',
+                      backgroundColor: 'rgba(0,0,0,0.5)',
                       '&:hover': { backgroundColor: 'rgba(0,0,0,0.7)' }
                     }}
                   >
@@ -537,7 +569,7 @@ const AnalyzePage = () => {
                     onClick={zoomOut}
                     sx={{
                       color: 'white',
-                      backgroundColor: 'rgba(0,0,0,0.5)',
+                      backgroundColor: 'rgba(0,0,0.5)',
                       '&:hover': { backgroundColor: 'rgba(0,0,0,0.7)' }
                     }}
                   >
@@ -547,7 +579,7 @@ const AnalyzePage = () => {
                     onClick={resetZoom}
                     sx={{
                       color: 'white',
-                      backgroundColor: 'rgba(0,0,0.5)',
+                      backgroundColor: 'rgba(0,0,0,0.5)',
                       '&:hover': { backgroundColor: 'rgba(0,0,0,0.7)' }
                     }}
                   >
@@ -555,29 +587,67 @@ const AnalyzePage = () => {
                   </IconButton>
                 </Box>
                 
+                {/* Container for image and overlay with the same transformation */}
                 <Box
                   sx={{
-                    transform: `scale(${zoomLevel}) translate(${position.x}px, ${position.y}px)`,
-                    transformOrigin: 'center center',
-                    transition: isDragging ? 'none' : 'transform 0.1s ease-out',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
                     width: '100%',
-                    height: '100%'
+                    height: '100%',
+                    position: 'relative',
+                    overflow: 'auto' // Allow scrolling when zoomed in
                   }}
                 >
-                  <img
-                    src={`http://localhost:5000/sessions/${sessionId}/files/${selectedImage.name}`}
-                    alt={selectedImage.name}
-                    style={{
-                      width: '100%',
-                      height: 'auto',
-                      maxHeight: '100vh',
-                      objectFit: 'contain',
-                      display: 'block'
+                  {/* Transform container for both image and overlay */}
+                  <Box
+                    sx={{
+                      transform: `scale(${zoomLevel}) translate(${position.x}px, ${position.y}px)`,
+                      transformOrigin: 'center center',
+                      transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+                      position: 'relative',
+                      display: 'inline-block' // Ensure it only takes the space of the image
                     }}
-                  />
+                  >
+                    {/* Image */}
+                    <img
+                      ref={imageRef}
+                      src={`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/sessions/${sessionId}/files/${selectedImage.name}`}
+                      alt={selectedImage.name}
+                      onLoad={(e) => {
+                        // Set the original image dimensions when the image loads
+                        setImageDimensions({
+                          width: e.target.naturalWidth,
+                          height: e.target.naturalHeight
+                        });
+                      }}
+                      style={{
+                        width: '100%',
+                        height: 'auto',
+                        maxHeight: '100vh',
+                        objectFit: 'contain',
+                        display: 'block',
+                        position: 'relative',
+                        zIndex: 1
+                      }}
+                    />
+                    {/* Bounding Box Overlay - positioned at the same level as the image */}
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        zIndex: 2 // Above the image but below controls
+                      }}
+                    >
+                      {imageAnalytics[selectedImage.name] && imageAnalytics[selectedImage.name].objects && (
+                        <BoundingBoxOverlay
+                          imageRef={imageRef}
+                          objects={imageAnalytics[selectedImage.name].objects}
+                          imageDimensions={imageDimensions}
+                        />
+                      )}
+                    </Box>
+                  </Box>
                 </Box>
               </Box>
 
@@ -679,6 +749,7 @@ const AnalyzePage = () => {
         </StyledDialog>
       )}
     </Container>
+  </Box>
   );
 };
 

@@ -4,10 +4,13 @@ const fs = require('fs');
 const path = require('path');
 const unzipper = require('unzipper');
 const cors = require('cors');
-const fetch = require('node-fetch');
+const AIServiceClient = require('./ai_service_client');
 
 const app = express();
 const port = 5000;
+
+// Initialize AI service client
+const aiServiceClient = new AIServiceClient();
 
 // Настройка CORS
 app.use(cors({
@@ -45,7 +48,7 @@ app.post('/upload', upload.array('files'), async (req, res) => {
     const sessionId = getFreeSessionId();
     const sessionDir = path.join(sessionsDir, String(sessionId));
     fs.mkdirSync(sessionDir);
-
+    fs.openSync(`${sessionDir}/results.json`, 'w');
     // Create mapping for original to server filenames
     const filenameMapping = {};
     const originalToServerNames = new Map(); // Map to track original to server name mapping
@@ -147,14 +150,7 @@ app.post('/upload', upload.array('files'), async (req, res) => {
 
     // Trigger AI analysis in the background
     setTimeout(() => {
-        // In Docker environment, call the AI service via HTTP instead of exec
-        fetch(`http://ai_service:5001/analyze/${sessionId}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(response => response.json())
+        aiServiceClient.analyzeSession(sessionId)
         .then(data => {
             console.log(`AI analysis started for session ${sessionId}:`, data);
         })
@@ -202,21 +198,32 @@ app.get('/sessions/:sessionId/files/:filename', (req, res) => {
 });
 
 // Получение результатов анализа для сессии
-app.get('/analysis/:sessionId/results', (req, res) => {
+app.get('/analysis/:sessionId/results', async (req, res) => {
     const sessionId = req.params.sessionId;
     const sessionDir = path.join(sessionsDir, sessionId);
     const resultsPath = path.join(sessionDir, 'results.json');
 
-    if (!fs.existsSync(resultsPath)) {
-        return res.status(404).json({ error: 'Результаты анализа не найдены' });
+    // First, try to read results from the local file
+    if (fs.existsSync(resultsPath)) {
+        const readFile = fs.readFileSync(resultsPath, "utf8");
+        if (readFile.length > 2) {
+            const results = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+            return res.json(results);
+        }
     }
 
-    const results = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
-    res.json(results);
+    // If file doesn't exist, try to get results from AI service
+    try {
+        const results = await aiServiceClient.getResults(sessionId);
+        return res.json(results);
+    } catch (error) {
+        console.error(`Error getting results from AI service: ${error}`);
+        return res.status(404).json({ error: 'Результаты анализа не найдены' });
+    }
 });
 
 // Получение статуса анализа для сессии
-app.get('/analysis/:sessionId/status', (req, res) => {
+app.get('/analysis/:sessionId/status', async (req, res) => {
     const sessionId = req.params.sessionId;
     const sessionDir = path.join(sessionsDir, sessionId);
     const resultsPath = path.join(sessionDir, 'results.json');
@@ -226,8 +233,15 @@ app.get('/analysis/:sessionId/status', (req, res) => {
         return res.json({ status: 'completed' });
     }
 
-    // Otherwise, analysis is in progress
-    res.json({ status: 'processing' });
+    // Otherwise, check status from AI service
+    try {
+        const statusData = await aiServiceClient.getStatus(sessionId);
+        res.json(statusData);
+    } catch (error) {
+        // If there's an error contacting the AI service, assume processing
+        console.error(`Error getting status from AI service: ${error}`);
+        res.json({ status: 'processing' });
+    }
 });
 
 app.listen(port, () => {

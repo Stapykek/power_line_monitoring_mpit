@@ -18,11 +18,13 @@ from inference import YOLOInference
 app = FastAPI(title="Power Line Maintenance AI Service", version="1.0.0")
 
 # Initialize the YOLO inference class
-MODEL_PATH = "/app/yolov8s.pt"  # Updated path for Docker
+MODEL_PATH = "C:\\Users\\1\\Desktop\\power_line_maintenance\\ai_model\\ai_model\\best.pt"
+print(Path(MODEL_PATH))
 inference = YOLOInference(MODEL_PATH, confidence_threshold=0.4)
 
+
 # Configuration
-SESSIONS_DIR = "/app/sessions" # Updated path for Docker
+SESSIONS_DIR = "C:\\Users\\1\\Desktop\\power_line_maintenance\\server\\sessions"
 
 # Store processing status
 processing_status = {}
@@ -48,8 +50,9 @@ async def analyze_session(session_id: str, background_tasks: BackgroundTasks):
     """
     Analyze all images in a session directory using YOLOv8
     """
+    print(Path(SESSIONS_DIR))
     session_path = Path(SESSIONS_DIR) / session_id
-    
+
     if not session_path.exists():
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     
@@ -176,7 +179,6 @@ async def get_status(session_id: str):
     else:
         session_path = Path(SESSIONS_DIR) / session_id
         results_path = session_path / "results.json"
-        
         if results_path.exists():
             return JSONResponse(content={"status": "completed", "processed": "unknown", "total": "unknown"})
         else:

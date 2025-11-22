@@ -99,8 +99,9 @@ const MainPage = () => {
     };
 
     return (
-        <Container maxWidth="sm" sx={{ py: 4 }}>
-            <Box textAlign="center">
+            <Box sx={{ backgroundColor: '#EEEEEE', minHeight: '100vh', py: 4 }}>
+                <Container maxWidth="sm">
+                <Box textAlign="center">
                 <Typography variant="h4" gutterBottom>
                     Искусственный интеллект для анализа состояния виброгасителей, изоляторов и траверсов ЛЭП
                 </Typography>
@@ -193,7 +194,8 @@ const MainPage = () => {
                 </Button>
             </Box>
             <Instructions/>
-        </Container>
+            </Container>
+        </Box>
     );
 };
 

@@ -2,6 +2,10 @@
 # Uses compose specification version 3.8
 version: '3.8'
 
+# Load environment variables from .env file
+env_file:
+  - .env
+
 services:
   # Client (React app)
   client:
@@ -12,6 +16,8 @@ services:
       - "80:80"
     depends_on:
       - server
+    environment:
+      - REACT_APP_API_URL=${REACT_APP_API_URL:-http://localhost:5000}
     networks:
       - app-network
 
@@ -28,6 +34,7 @@ services:
       - ./ai_model/yolov8s.pt:/app/yolov8s.pt  # Mount the AI model
     environment:
       - NODE_ENV=production
+      - AI_SERVICE_URL=${AI_SERVICE_URL:-http://ai_service:5001}
     networks:
       - app-network
 
